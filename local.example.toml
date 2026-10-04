@@ -1,0 +1,8 @@
+# Local paths may be relative to this file, or ${ENV_NAME}; never commit local.toml.
+memory_root = "${MEMORY_OS_ROOT}"
+memory_python = "${MEMORY_OS_PYTHON}"
+dhaf_root = "${DHAF_ROOT}"
+hermes_python = "${HERMES_PYTHON}"
+hermes_source = "${HERMES_SOURCE}"
+# Installed pinned dependency, visible to the Hermes runtime through PYTHONPATH.
+capsule_site = "${CAPSULE_SITE}"

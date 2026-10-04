@@ -1,0 +1,15 @@
+{
+  "project_id": "project-a",
+  "version": "0.1",
+  "artifact_workspace": "artifacts",
+  "allowed_tools": [
+    "read_file"
+  ],
+  "allowed_skills": [
+    "meridian"
+  ],
+  "created_at": "2026-10-04T00:00:00Z",
+  "project_root": ".",
+  "project_name": "Synthetic Project A",
+  "memory_namespace": "synthetic/project-a"
+}

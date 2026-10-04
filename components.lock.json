@@ -1,0 +1,5 @@
+{
+  "capsule": {"repo": "https://github.com/realbakari/capsule", "commit": "6492d704f9d389233038ee35630940acba7c2f2f", "license": "Apache-2.0"},
+  "memory_os": {"repo": "https://github.com/hcxhcx1981-hash/agent-memory-os", "commit": "e53d43089f288146a089281cfce47403544d6004"},
+  "dhaf": {"mode": "SHADOW_ONLY", "live_ready": false}
+}

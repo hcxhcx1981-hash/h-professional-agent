@@ -1,0 +1,10 @@
+{
+  "tools": [
+    "read_file"
+  ],
+  "name": "meridian",
+  "triggers": [
+    "inspect meridian report"
+  ],
+  "description": "inspect meridian report"
+}

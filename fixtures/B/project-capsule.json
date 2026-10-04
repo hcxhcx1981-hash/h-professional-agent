@@ -1,0 +1,15 @@
+{
+  "project_id": "project-b",
+  "version": "0.1",
+  "artifact_workspace": "artifacts",
+  "allowed_tools": [
+    "search_files"
+  ],
+  "allowed_skills": [
+    "cobalt"
+  ],
+  "created_at": "2026-10-04T00:00:00Z",
+  "project_root": ".",
+  "project_name": "Synthetic Project B",
+  "memory_namespace": "synthetic/project-b"
+}

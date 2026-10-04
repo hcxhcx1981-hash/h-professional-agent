@@ -1,0 +1,10 @@
+{
+  "tools": [
+    "search_files"
+  ],
+  "name": "cobalt",
+  "triggers": [
+    "inspect cobalt ledger"
+  ],
+  "description": "inspect cobalt ledger"
+}
