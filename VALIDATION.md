@@ -5,7 +5,7 @@ Date: 2026-10-04 (Asia/Shanghai).
 ## Results
 
 - Private repository created through the existing GitHub CLI absolute executable; no remote initial files, login changes, or new tools.
-- Unit/regression: 10/10 PASS.
+- Unit/regression: 11/11 PASS, including Windows CRLF checkout equivalence for the pinned external dependency.
 - Python wheel build: PASS (no dependency installation during final validation).
 - Real normal Hermes CLI chat: Project A PASS; Project B PASS. Route/namespace preflight precedes the unchanged normal chat main, and selected native tools execute in real model conversations.
 - A: only meridian/read_file selected; successful read_file tool result; final response contains A_MEMORY_MERIDIAN and SYNTHETIC_NATIVE_A, no B_MEMORY_COBALT.

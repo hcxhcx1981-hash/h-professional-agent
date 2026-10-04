@@ -83,6 +83,12 @@ class ScopeTests(unittest.TestCase):
             with self.assertRaisesRegex(Blocked, "DEPENDENCY_DRIFT"):
                 verify_capsule_dependency()
 
+    def test_pinned_dependency_accepts_windows_checkout_newlines(self):
+        from unittest.mock import patch
+        original = Path.read_bytes
+        with patch.object(Path, "read_bytes", lambda file: original(file).replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")):
+            verify_capsule_dependency()
+
     def test_skill_tool_grant_cannot_expand_host_selection(self):
         data = dict(self.a.data, allowed_tools=["search_files"], project_root="..")
         capsule_file = self.a.artifacts / (uuid.uuid4().hex + "-capsule.json")

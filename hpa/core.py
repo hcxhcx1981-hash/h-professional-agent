@@ -141,7 +141,9 @@ def verify_capsule_dependency():
     expected = json.loads(Path(__file__).with_name("capsule-integrity.json").read_text(encoding="utf-8"))
     if expected["commit"] != PIN:
         raise Blocked("ROUTER_PIN_MISMATCH")
-    actual = {str(file.relative_to(installed)).replace("\\", "/"): hashlib.sha256(file.read_bytes()).hexdigest() for file in installed.rglob("*.py")}
+    # Windows Git checkouts may use CRLF. Check code identity, not the host's
+    # checkout newline conversion; every other byte still participates.
+    actual = {str(file.relative_to(installed)).replace("\\", "/"): hashlib.sha256(file.read_bytes().replace(b"\r\n", b"\n")).hexdigest() for file in installed.rglob("*.py")}
     if actual != expected["files"]:
         raise Blocked("ROUTER_DEPENDENCY_DRIFT")
 
