@@ -13,6 +13,10 @@
     "allowed_tools": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-zA-Z0-9_-]+$"}},
     "memory_namespace": {"type": "string", "minLength": 1},
     "artifact_workspace": {"type": "string", "minLength": 1},
-    "created_at": {"type": "string", "format": "date-time"}
+    "created_at": {"type": "string", "format": "date-time"},
+    "project_purpose": {"type": "string", "minLength": 1},
+    "phase": {"type": "string", "minLength": 1},
+    "blocked_capabilities": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-zA-Z0-9_-]+$"}},
+    "provenance": {"type": "object"}
   }
 }

@@ -179,6 +179,42 @@ class ContinuationTests(unittest.TestCase):
             self.assertEqual(c.execute('SELECT value FROM evidence').fetchone()[0],'committed-in-wal')
         self.assertEqual(before,{p:hashlib.sha256(p.read_bytes()).digest() for p in files})
 
+    def test_capsule_annotation_fields_load(self):
+        from hpa.continuation import resolve_capsule
+        p = self.project
+        path = Path(p.workspace) / 'project-capsule.json'
+        path.write_text(json.dumps(dict(
+            version='0.1', project_id=p.project_id, project_name=p.project_name,
+            project_root='.', allowed_skills=['inspect'],
+            allowed_tools=['read_file', 'terminal'],
+            memory_namespace='synthetic/' + p.project_id,
+            artifact_workspace='artifacts', created_at=self.now.isoformat(),
+            project_purpose='selftest', phase='capsule-binding',
+            blocked_capabilities=['dhaf_live', 'trading'],
+            provenance={'source_repo': 'h-professional-agent', 'contains_secret': False}
+        )), encoding='utf-8')
+        cap = resolve_capsule(p, [path])
+        self.assertIsNotNone(cap)
+        self.assertEqual(cap.id, p.project_id)
+        self.assertEqual(cap.root, Path(p.workspace).resolve())
+        self.assertEqual(cap.data['phase'], 'capsule-binding')
+        self.assertIn('trading', cap.data['blocked_capabilities'])
+
+    def test_capsule_resolver_isolation(self):
+        from hpa.continuation import resolve_capsule
+        cap_path = Path(self.project.workspace) / 'project-capsule.json'
+        cap_path.write_text(json.dumps(dict(
+            version='0.1', project_id=self.project.project_id,
+            project_name=self.project.project_name, project_root='.',
+            allowed_skills=['inspect'], allowed_tools=['read_file'],
+            memory_namespace='synthetic/x', artifact_workspace='artifacts',
+            created_at=self.now.isoformat())), encoding='utf-8')
+        # A DIFFERENT Hermes project (different id) must NOT bind to this capsule.
+        other = replace(self.project, project_id='other-proj')
+        self.assertIsNone(resolve_capsule(other, [cap_path]))
+        # No workspace -> no binding.
+        nows = replace(self.project, workspace=None)
+        self.assertIsNone(resolve_capsule(nows, [cap_path]))
 
 if __name__ == '__main__':
     unittest.main()

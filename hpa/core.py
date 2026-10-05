@@ -13,7 +13,14 @@ from pathlib import Path
 
 PIN = "6492d704f9d389233038ee35630940acba7c2f2f"
 MEMORY_PIN = "e53d43089f288146a089281cfce47403544d6004"
-FIELDS = {"version", "project_id", "project_name", "project_root", "allowed_skills", "allowed_tools", "memory_namespace", "artifact_workspace", "created_at"}
+# V0.1 required capsule fields. `FIELDS` is kept as an alias so existing imports/
+# references keep working.
+REQUIRED_FIELDS = {"version", "project_id", "project_name", "project_root", "allowed_skills", "allowed_tools", "memory_namespace", "artifact_workspace", "created_at"}
+# Optional V0.1 annotation fields: express project purpose / current phase / blocked
+# capabilities / provenance on the SAME capsule without a second capsule system.
+# Existing 9-field capsules remain valid (strict subset of REQUIRED ∪ OPTIONAL).
+OPTIONAL_ANNOTATION_FIELDS = {"project_purpose", "phase", "blocked_capabilities", "provenance"}
+FIELDS = REQUIRED_FIELDS
 
 
 class Blocked(ValueError):
@@ -57,7 +64,8 @@ class Project:
         file = file.resolve()
         raw = file.read_bytes()
         data = json.loads(raw)
-        if set(data) != FIELDS or data["version"] != "0.1":
+        allowed_keys = REQUIRED_FIELDS | OPTIONAL_ANNOTATION_FIELDS
+        if not set(data) <= allowed_keys or not set(data) >= REQUIRED_FIELDS or data["version"] != "0.1":
             raise Blocked("CAPSULE_SCHEMA_INVALID")
         for key in FIELDS - {"allowed_skills", "allowed_tools"}:
             if not isinstance(data[key], str) or not data[key].strip():

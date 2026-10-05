@@ -180,6 +180,51 @@ def recommend(intent: str, device: DeviceContext, capsule: Project | None,
     return RoutingRecommendation(target, 'READ_ONLY_RECOMMENDATION; EXECUTION/GATE/HEALTH_NOT_VALIDATED')
 
 
+def _project_identity(project) -> "tuple[str | None, str | None]":
+    """Duck-type a Hermes project into (project_id, workspace) so the resolver works
+    for both the internal NormalizedProjectState and the official hermes_cli
+    projects_db.Project (which exposes .id and .primary_path/.folders, not .workspace)."""
+    pid = getattr(project, "project_id", None) or getattr(project, "id", None)
+    ws = getattr(project, "workspace", None)
+    if ws is None:
+        ws = getattr(project, "primary_path", None)
+        if ws is None:
+            folders = getattr(project, "folders", None)
+            if folders:
+                for f in folders:
+                    if getattr(f, "is_primary", False):
+                        ws = f.path
+                        break
+                else:
+                    ws = folders[0].path
+    return pid, ws
+
+
+def resolve_capsule(project, candidate_paths) -> "Project | None":
+    """Pick the Project Capsule whose identity AND workspace bind to this Hermes project.
+
+    Reuses hpa.core.Project.load and the exact (project_id, root) criteria that
+    recommend() already enforces; no second capsule system, no capsule/Memory OS/DHAF
+    dependency. Returns None when no candidate binds (isolation: nothing leaks to a
+    project that is not this one)."""
+    from .core import Project
+    pid, ws = _project_identity(project)
+    if not pid or not ws:
+        return None
+    try:
+        target_ws = Path(ws).resolve()
+    except (OSError, TypeError):
+        return None
+    for cand in list(candidate_paths):
+        try:
+            cap = Project.load(cand)
+        except Exception:
+            continue
+        if cap.id == pid and cap.root == target_ws:
+            return cap
+    return None
+
+
 @dataclass(frozen=True)
 class ContinueResolution:
     status: str
