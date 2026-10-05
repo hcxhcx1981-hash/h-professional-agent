@@ -55,6 +55,165 @@ CAP_ORDER = list(CAPABILITIES)  # stable output order
 RESTRICTED = ("external_agent", "code_edit", "write_delete")
 
 
+# ---- Runtime tool discovery (V0.1: read-only facts, no health probe) --------
+# Discovery is SEPARATE from routing: it supplies facts about which tools are
+# declared/requested in the current Hermes runtime, and the pure router above
+# does all ALLOW/BLOCK decisions from those facts.
+#
+# Semantics (three tiers, only the first two are producible without probing):
+#   REGISTERED        : Hermes has declared the tool globally (toolset catalog
+#                      BUILTIN_TOOL_NAMES) or it is registered into the live
+#                      registry (plugin/extension). Proof of declaration only.
+#   SESSION_REQUESTED : the active session's toolset selection requests the tool
+#                      (model_tools._select_tool_names, before check_fn). The
+#                      most specific read-only session-level fact; NOT a health
+#                      confirmation.
+#   AVAILABLE         : confirmed healthy/callable — requires running a tool's
+#                      check_fn (external probe). FORBIDDEN this round, so
+#                      health_status is always "UNKNOWN" and never "AVAILABLE".
+
+@dataclass(frozen=True)
+class ToolDiscovery:
+    """Read-only discovery facts. Never executes a tool, never probes health.
+
+    `session_tools` is the set the active session's toolset selection requests
+    (check_fn-free, official read-only source); `registered_tools` is the
+    global declaration union. The session set is preferred; `degraded` marks
+    the fallback to registration-only when the session source is unreachable.
+    """
+    session_tools: frozenset
+    registered_tools: frozenset
+    session_count: int
+    registered_count: int
+    degraded: bool
+    health_status: str = "UNKNOWN"   # never 'AVAILABLE' without a probe
+    probed: bool = False
+    source: str = ""
+
+    def mapped_tools(self) -> set:
+        """Tool names of the six candidate capabilities."""
+        return {CAPABILITIES[c]["tool"] for c in CAP_ORDER}
+
+    def runtime_tools(self) -> list:
+        """Facts to feed the pure router: session-requested tools relevant to
+        our capabilities (preferred), else registered ones when degraded.
+        'present' here means declared/requested — health NOT confirmed."""
+        base = self.session_tools if not self.degraded else self.registered_tools
+        return sorted(t for t in self.mapped_tools() if t in base)
+
+    def missing_mapped(self) -> set:
+        """Mapped tools absent from the preferred presence set."""
+        base = self.session_tools if not self.degraded else self.registered_tools
+        return {t for t in self.mapped_tools() if t not in base}
+
+    def without(self, tool_names, *, session: bool = True) -> "ToolDiscovery":
+        """Model a runtime that lacks the given tools, WITHOUT probing. The
+        caller supplies the names (e.g. a test simulating an absent backend);
+        we only drop them from the presence set(s)."""
+        drop = frozenset(tool_names)
+        if session:
+            return ToolDiscovery(
+                session_tools=self.session_tools - drop,
+                registered_tools=self.registered_tools - drop,
+                session_count=max(0, self.session_count - len(drop)),
+                registered_count=max(0, self.registered_count - len(drop)),
+                degraded=self.degraded, health_status=self.health_status,
+                probed=self.probed, source=self.source + f"; simulated-exclusion={sorted(drop)}")
+        return ToolDiscovery(
+            session_tools=self.session_tools,
+            registered_tools=self.registered_tools - drop,
+            session_count=self.session_count,
+            registered_count=max(0, self.registered_count - len(drop)),
+            degraded=self.degraded, health_status=self.health_status,
+            probed=self.probed, source=self.source + f"; simulated-exclusion(registered)={sorted(drop)}")
+
+
+def _session_tool_names(enabled_toolsets, disabled_toolsets):
+    """Active-session requested tool names via the official read-only resolver
+    (model_tools._select_tool_names: toolset selection BEFORE check_fn)."""
+    try:
+        from model_tools import _select_tool_names
+        sel = _select_tool_names(list(enabled_toolsets), list(disabled_toolsets),
+                                 quiet_mode=True)
+        return frozenset(sel) if sel is not None else None
+    except Exception:
+        return None
+
+
+def _registered_tool_names() -> "tuple[frozenset, str]":
+    """Global declaration union: toolset catalog names + live registry names."""
+    parts = []
+    names = set()
+    try:
+        from toolsets import BUILTIN_TOOL_NAMES
+        names.update(BUILTIN_TOOL_NAMES)
+        parts.append(f"catalog={len(BUILTIN_TOOL_NAMES)}")
+    except Exception:
+        parts.append("catalog=unreachable")
+    try:
+        from tools.registry import registry
+        entries = registry.get_all_entries()
+        names.update(e.name for e in entries)
+        parts.append(f"registry={len(entries)}")
+    except Exception:
+        parts.append("registry=unreachable")
+    return frozenset(names), ";".join(parts)
+
+
+def discover_runtime_tools(
+    enabled_toolsets=None,
+    disabled_toolsets=None,
+    *,
+    injected_session=None,
+    injected_registered=None,
+) -> ToolDiscovery:
+    """Read-only discovery of tools present in the current Hermes runtime.
+
+    Production: session set from the active profile's toolset selection
+    (``enabled_toolsets``/``disabled_toolsets`` read from config when not
+    passed); registration union as the fallback base. Test: inject both sets
+    so the adapter is unit-testable without a Hermes checkout. Either way
+    NOTHING executes a tool and health is never probed.
+
+    Prefers SESSION_REQUESTED; falls back to REGISTERED-only (degraded=True)
+    when the official session source is unreachable, and says so in source —
+    a registration-only result is never described as runtime-available tools.
+    """
+    if injected_session is None and injected_registered is None:
+        if enabled_toolsets is None or disabled_toolsets is None:
+            enabled_toolsets, disabled_toolsets = _load_profile_toolset_selection()
+        session = _session_tool_names(enabled_toolsets, disabled_toolsets)
+        if session is None:
+            # Session source unreachable: degrade to registration discovery.
+            reg, reg_source = _registered_tool_names()
+            return ToolDiscovery(frozenset(), reg, 0, len(reg), True,
+                                 "UNKNOWN", False,
+                                 f"degraded=REGISTERED_DISCOVERY ({reg_source})")
+        reg, reg_source = _registered_tool_names()
+        return ToolDiscovery(
+            session, reg, len(session), len(reg), False,
+            "UNKNOWN", False,
+            f"session=requested(pre-check_fn,enabled={sorted(enabled_toolsets)},disabled={sorted(disabled_toolsets)}); {reg_source}; health=UNKNOWN(no-probe)")
+    reg = frozenset(injected_registered) if injected_registered is not None else frozenset()
+    session = frozenset(injected_session) if injected_session is not None else frozenset()
+    degraded = injected_session is None
+    return ToolDiscovery(session, reg, len(session), len(reg), degraded,
+                         "UNKNOWN", False,
+                         "injected-facts (test); health=UNKNOWN(no-probe)")
+
+
+def _load_profile_toolset_selection() -> "tuple[list, list]":
+    """The active profile's toolset selection, read-only from Hermes config."""
+    try:
+        from hermes_cli.config import load_config
+        cfg = load_config() or {}
+        enabled = [str(t) for t in (cfg.get("toolsets") or [])]
+        disabled = [str(t) for t in (((cfg.get("agent") or {}).get("disabled_toolsets")) or [])]
+        return enabled, disabled
+    except Exception:
+        return [], []
+
+
 def task_profile(text: str) -> set[str]:
     """Which of the six candidate capabilities a task is relevant to.
 
@@ -155,7 +314,7 @@ def route_capabilities(
     text: str,
     project,
     capsule,
-    available_tools: Iterable[str],
+    runtime_tools: Iterable[str],
     *,
     available_adapters: Optional[Iterable[str]] = None,
     round_blocked: Optional[Iterable[str]] = None,
@@ -165,14 +324,17 @@ def route_capabilities(
     ``project`` may be the official hermes_cli.projects_db.Project or the internal
     NormalizedProjectState (duck-typed). ``capsule`` must already be bound via
     resolve_capsule() for this project — pass None when outside any project space.
+    ``runtime_tools`` is the set of tool names PRESENT in this runtime/session,
+    as discovered read-only (see discover_runtime_tools / ToolDiscovery). Presence
+    here is registration/session-request, NOT a health confirmation — a capability
+    can be ALLOWed on registration grounds without the tool being probe-verified.
     Nothing here executes a tool; it returns a decision only."""
-    avail = set(available_tools or ())
+    present = set(runtime_tools or ())
     adapters = set((available_adapters or ()))
     policy = set(round_blocked or ())
     intent = infer_intent(text)
     prof = task_profile(text)
     restricted = detect_restricted(text)
-
     pid = _project_identity(project)[0] if project else None
     cid = getattr(capsule, "id", None) if capsule else None
     in_scope = bool(project and capsule and capsule.id == pid)
@@ -198,13 +360,14 @@ def route_capabilities(
             verdicts[cap] = CapabilityVerdict(cap, "BLOCK", "CAPSULE_BLOCKED (project boundary overrides model)", tool)
         elif cap in policy:
             verdicts[cap] = CapabilityVerdict(cap, "BLOCK", "ROUND_POLICY_BLOCKED", tool)
-        elif tool not in avail:
+        elif tool not in present:
             verdicts[cap] = CapabilityVerdict(cap, "UNAVAILABLE",
-                                              f"TOOL_UNAVAILABLE ({tool} not in this runtime)", tool)
+                                              f"TOOL_NOT_REGISTERED ({tool} absent from this runtime/session)", tool)
         elif allowed_tools and tool not in allowed_tools:
             verdicts[cap] = CapabilityVerdict(cap, "BLOCK", "TOOL_NOT_IN_CAPSULE_ALLOWED_TOOLS", tool)
         else:
-            verdicts[cap] = CapabilityVerdict(cap, "ALLOW", "TASK_RELEVANT + CAPSULE_GRANTED + TOOL_AVAILABLE", tool)
+            verdicts[cap] = CapabilityVerdict(cap, "ALLOW",
+                                              "TASK_RELEVANT + CAPSULE_GRANTED + TOOL_REGISTERED (health=UNKNOWN)", tool)
 
     # Restricted / external requests: classified, never executed.
     requested = {}
@@ -249,13 +412,21 @@ def main() -> int:
                    help="Hermes project id; empty = outside any project space")
     p.add_argument("--capsule", type=Path, default=None, help="selftest capsule path")
     p.add_argument("--available-tools", type=str, default="",
-                   help="comma-sep real tool names available in this runtime")
+                   help="comma-sep tool names to treat as present (OVERRIDE; empty = auto-discover)")
     p.add_argument("--adapters", type=str, default="",
                    help="comma-sep available adapter ids (H_NATIVE/CX)")
     a = p.parse_args()
 
-    tools = [x for x in a.available_tools.split(",") if x]
     adapters = [x for x in a.adapters.split(",") if x]
+
+    # Presence facts: explicit override, else read-only runtime discovery.
+    if a.available_tools:
+        tools = [x for x in a.available_tools.split(",") if x]
+        tool_note = "manual-override"
+    else:
+        disc = discover_runtime_tools()
+        tools = disc.runtime_tools()
+        tool_note = disc.source
 
     # Outside a project space (no --project-id): project stays None so the capsule
     # is NOT used for routing (scope isolation).
@@ -270,7 +441,10 @@ def main() -> int:
             capsule = cap if cap.id == a.project_id else None
 
     decision = route_capabilities(a.text, project, capsule, tools, available_adapters=adapters)
-    print(json.dumps(decision.to_dict(), ensure_ascii=False, indent=2))
+    out = decision.to_dict()
+    out["TOOLS_SOURCE"] = tool_note
+    out["HEALTH_STATUS"] = "UNKNOWN"
+    print(json.dumps(out, ensure_ascii=False, indent=2))
     return 0
 
 

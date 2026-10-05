@@ -107,7 +107,7 @@ class CapabilityRouterTests(unittest.TestCase):
     def test_project_scope_isolation(self):
         # outside the project space the capsule must NOT drive routing
         d = route_capabilities("读取当前项目 README 并总结当前架构。",
-                               project=None, capsule=None, available_tools=self.TOOLS,
+                               project=None, capsule=None, runtime_tools=self.TOOLS,
                                available_adapters=("H_NATIVE", "CX"))
         self.assertFalse(d.in_scope)
         self.assertEqual(d.verdicts["PROJECT_CONTEXT"]["status"], "NOT_NEEDED")
