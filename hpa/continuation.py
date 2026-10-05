@@ -248,7 +248,8 @@ class ContinueResolution:
 
 
 def resolve(request: ContinueRequest, device: DeviceContext,
-            states: list[NormalizedProjectState], capsule: Project | None = None) -> ContinueResolution:
+            states: list[NormalizedProjectState], capsule: Project | None = None,
+            extra_aliases: dict | None = None) -> ContinueResolution:
     def answer(status, reason, candidates=(), p=None, routing=None):
         return ContinueResolution(status, p.project_id if p else None,
             p.project_name if p else None, p.workspace if p and status == 'RESOLVED' else None,
@@ -272,7 +273,8 @@ def resolve(request: ContinueRequest, device: DeviceContext,
         pattern = rf'(?<![a-z0-9_-]){escaped}(?![a-z0-9_-])' if name.isascii() else escaped
         return bool(re.search(pattern, text))
     matches = [p for p in states if any(named(name)
-               for name in (p.project_name, *p.aliases))]
+               for name in (p.project_name, *p.aliases,
+                            *(extra_aliases or {}).get(p.project_id, ())))]
     generic_yesterday = re.sub(r'\s+', '', text) in {
         '继续昨天那个项目', '继续昨天的项目', '昨天那个项目', '昨天cx做到哪了'}
     if not matches and generic_yesterday:
@@ -331,13 +333,26 @@ def main():
     parser.add_argument('--memory-root', type=Path)
     parser.add_argument('--memory-python', type=Path)
     parser.add_argument('--intent', choices=['status', 'query', 'memory', 'analysis', 'develop', 'test', 'git', 'unknown'])
+    parser.add_argument('--alias', action='append', default=[],
+                        help='project_id=alias pair; trusted CLI-provided aliases for name matching only')
     args = parser.parse_args()
     try:
         device = local_device(args.hermes_home, args.trusted_root)
         states = read_states(args.hermes_home)
         capsule = Project.load(args.capsule) if args.capsule else None
         intent = args.intent or infer_intent(args.text)
-        result = resolve(ContinueRequest(args.text, intent=intent), device, states, capsule)
+        extra_aliases = {}
+        for pair in args.alias:
+            pid, sep, alias = pair.partition('=')
+            if not sep or not pid or not alias:
+                raise ValueError('ALIAS_PAIR_INVALID')
+            extra_aliases.setdefault(pid, []).append(alias)
+        # Alias authority derives from the capsule binding: when a capsule is
+        # provided, aliases only apply to that capsule's own project.
+        if capsule is not None:
+            extra_aliases = {k: v for k, v in extra_aliases.items() if k == capsule.id} or None
+        result = resolve(ContinueRequest(args.text, intent=intent), device, states, capsule,
+                         extra_aliases or None)
         if args.memory_root or args.memory_python:
             if not args.memory_root or not args.memory_python or capsule is None:
                 raise ValueError('EXPLICIT_MEMORY_ADAPTER_INPUTS_REQUIRED')
