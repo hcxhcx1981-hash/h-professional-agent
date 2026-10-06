@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "projects": [
+    {
+      "project_id": "p_example",
+      "display_name": "example-project",
+      "aliases": ["Example Project", "示例项目"],
+      "machine_id": "example-machine-id",
+      "workspace": "C:\\workspaces\\example-project",
+      "git_remote": "https://github.com/example-owner/example-project",
+      "h_project_id": "p_example",
+      "project_type": "python",
+      "status": "UNKNOWN",
+      "last_active_at": null,
+      "next_action": "查询并整理项目状态",
+      "memory_namespace": null,
+      "memory_ref": null,
+      "tags": ["personal-agent", "control-plane"]
+    }
+  ]
+}

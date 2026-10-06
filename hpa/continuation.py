@@ -330,6 +330,10 @@ def main():
     parser.add_argument('--hermes-home', type=Path, required=True)
     parser.add_argument('--trusted-root', type=Path, action='append', required=True)
     parser.add_argument('--capsule', type=Path)
+    parser.add_argument('--registry', action='store_true', help='Use ephemeral multi-source registry')
+    parser.add_argument('--registry-file', type=Path, help='Canonical project registry configuration')
+    parser.add_argument('--github-owner')
+    parser.add_argument('--registry-memory-store', type=Path, action='append', default=[])
     parser.add_argument('--memory-root', type=Path)
     parser.add_argument('--memory-python', type=Path)
     parser.add_argument('--intent', choices=['status', 'query', 'memory', 'analysis', 'develop', 'test', 'git', 'unknown'])
@@ -341,24 +345,35 @@ def main():
         states = read_states(args.hermes_home)
         capsule = Project.load(args.capsule) if args.capsule else None
         intent = args.intent or infer_intent(args.text)
-        extra_aliases = {}
+        from .registry import ProjectRegistry, DEFAULT_REGISTRY
+        view = ProjectRegistry.load(args.registry_file or DEFAULT_REGISTRY,device,states)
         for pair in args.alias:
             pid, sep, alias = pair.partition('=')
             if not sep or not pid or not alias:
                 raise ValueError('ALIAS_PAIR_INVALID')
-            extra_aliases.setdefault(pid, []).append(alias)
-        # Alias authority derives from the capsule binding: when a capsule is
-        # provided, aliases only apply to that capsule's own project.
-        if capsule is not None:
-            extra_aliases = {k: v for k, v in extra_aliases.items() if k == capsule.id} or None
-        result = resolve(ContinueRequest(args.text, intent=intent), device, states, capsule,
-                         extra_aliases or None)
-        if args.memory_root or args.memory_python:
+            if capsule is not None and pid != capsule.id:
+                continue
+            targets = [p for p in view.records if p.project_id == pid]
+            if len(targets) != 1:
+                raise ValueError('ALIAS_REQUIRES_CANONICAL_PROJECT')
+            targets[0].aliases.append(alias)
+        request = ContinueRequest(args.text, intent=intent)
+        if args.registry:
+            from .registry import h_source, local_source, github_source, memory_source
+            if not args.github_owner: raise ValueError('GITHUB_OWNER_REQUIRED')
+            h = h_source(args.hermes_home)
+            local = local_source(args.trusted_root, [r['workspace'] for r in h if r['workspace']])
+            github, gs = github_source(args.github_owner, Path('C:/Program Files/GitHub CLI/gh.exe'))
+            if args.registry_memory_store:
+                if not args.memory_root or not args.memory_python: raise ValueError('MEMORY_INPUTS_REQUIRED')
+                memory_source(args.memory_root, args.memory_python, args.registry_memory_store)
+        result = view.continue_request(request,capsule)
+        if not args.registry and (args.memory_root or args.memory_python):
             if not args.memory_root or not args.memory_python or capsule is None:
                 raise ValueError('EXPLICIT_MEMORY_ADAPTER_INPUTS_REQUIRED')
-            if result.status == 'RESOLVED':
+            if isinstance(result,ContinueResolution) and result.status == 'RESOLVED':
                 result = with_memory(result, capsule, args.memory_root, args.memory_python, args.text)
-        print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
+        print(json.dumps(result if isinstance(result, dict) else asdict(result), ensure_ascii=False, indent=2))
         return 0
     except (OSError, ValueError, sqlite3.Error, subprocess.SubprocessError):
         print(json.dumps({'status': 'DEVICE_UNTRUSTED', 'reason': 'SOURCE_UNAVAILABLE_OR_INVALID; NO_WRITES_PERFORMED'}))
