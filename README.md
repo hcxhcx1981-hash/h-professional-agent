@@ -29,6 +29,8 @@ python -B -m hpa.registry --hermes-home '<HERMES_HOME>' --root '<WORKSPACE>'
 
 使用说明：[Project Registry](docs/PHASE_2A_PROJECT_REGISTRY.md)、[Task Routing](docs/TASK_ROUTING.md)。下面是早期 synthetic Capsule/chat 适配层的独立运行流程。
 
+真实 H 工具暴露、独立 Browser 与外部 Memory OS 接入核准见 [Tool Reliability](docs/TOOL_RELIABILITY.md)。
+
 ## 边界
 
 - allowed_skills / allowed_tools 是 **Host selection**，不是 Runtime security。每进程注册一个明确的原生工具集合，不修改全局设置。
