@@ -24,7 +24,7 @@ Approval Gate：CX/WB/AC 始终 `requires_user_approval=true`、`execution_allow
 Machine Isolation：先通过 Phase 2A canonical Registry + Continue Resolver 核验真实 H binding、可信当前机器和 workspace。跨机器、失效路径、歧义、损坏 Registry 均阻断，不猜替代目录。
 
 ```powershell
-Set-Location <PROJECT_ROOT>
+Set-Location '<PROJECT_ROOT>'
 & '<HERMES_PYTHON>' -X utf8 -B -m hpa.capability '继续开发 h-professional-agent，增加跨文件正式功能并做 Git 收口' --task-route --hermes-home '<HERMES_HOME>' --trusted-root '<PROJECT_ROOT>' --acceptance '相关测试与构建通过' --relevant-path hpa/capability.py --relevant-path tests/test_task_routing.py
 & '<HERMES_PYTHON>' -X utf8 -B -m tests.task_routing_e2e --hermes-home '<HERMES_HOME>' --workspace '<PROJECT_ROOT>'
 ```

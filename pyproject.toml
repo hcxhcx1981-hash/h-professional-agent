@@ -13,4 +13,4 @@ dependencies = ["capsule-ctrl @ git+https://github.com/realbakari/capsule.git@64
 include = ["hpa*"]
 
 [tool.setuptools.package-data]
-hpa = ["*.json"]
+hpa = ["capsule-integrity.json", "project-registry.example.json"]

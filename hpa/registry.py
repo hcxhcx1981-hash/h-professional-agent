@@ -15,6 +15,7 @@ from dataclasses import replace
 import ntpath
 
 DEFAULT_REGISTRY = Path(__file__).with_name('project-registry.local.json')
+EXAMPLE_REGISTRY = Path(__file__).with_name('project-registry.example.json')
 
 def workspace_key(value):
     return ntpath.normcase(ntpath.normpath(value))

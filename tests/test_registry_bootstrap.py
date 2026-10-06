@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import unittest
 import tempfile
-from hpa.registry import ProjectRegistry, DEFAULT_REGISTRY
+from hpa.registry import ProjectRegistry, EXAMPLE_REGISTRY, DEFAULT_REGISTRY
 from hpa.continuation import ContinueRequest, DeviceContext, NormalizedProjectState
 
 
@@ -16,7 +16,7 @@ class BootstrapTests(unittest.TestCase):
             (),datetime.now(timezone.utc).isoformat(),'fixture',1.0)
         self.state=NormalizedProjectState('p_real','project',str(self.root),None,'IDLE',None,None,
             None,'query',None,('H/projects/p_real',))
-        self.row=json.loads(DEFAULT_REGISTRY.read_text(encoding='utf-8'))['projects'][0]
+        self.row=json.loads(EXAMPLE_REGISTRY.read_text(encoding='utf-8'))['projects'][0]
         self.row.update(project_id='p_real',h_project_id='p_real',machine_id=self.device.device_id,
                         workspace=str(self.root),display_name='project',aliases=['alias'])
         self.file=self.root/'registry.json'
@@ -27,6 +27,12 @@ class BootstrapTests(unittest.TestCase):
 
     def test_canonical_load(self):
         self.assertEqual(self.load().records[0].project_id,'p_real')
+
+    def test_runtime_registry_is_local_and_missing_fails_closed(self):
+        self.assertEqual(DEFAULT_REGISTRY.name,'project-registry.local.json')
+        self.assertEqual(EXAMPLE_REGISTRY.name,'project-registry.example.json')
+        with self.assertRaises(OSError):
+            ProjectRegistry.load(self.root/'missing.local.json',self.device)
 
     def test_exact_identifiers(self):
         self.row['h_project_id']='h_other'

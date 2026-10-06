@@ -2,6 +2,8 @@
 
 复用 `hpa/registry.py`，canonical 配置为 `hpa/project-registry.local.json`，只登记当前现场核验的 H 项目。没有新数据库、依赖或调度。
 
+真实配置仅存本地并由 Git 忽略。公开示例为 `hpa/project-registry.example.json`，使用虚构身份；测试读取示例并创建临时 fixture。缺少 local 配置时阻断，不自动使用示例。wheel 只分发示例，安装后可用 `--registry-file` 指定本机配置。
+
 Source of Truth：Registry 管项目身份、别名、机器和外部引用；H 管任务状态；Git origin 管仓库地址；本机文件系统管路径是否可用。Registry 不赋予执行权限。
 
 静态配置：project_id、display_name、aliases、machine_id、workspace、git_remote、h_project_id、project_type、tags，以及显式 Memory 引用。memory_namespace 沿用 Capsule 契约，未验证绑定时为 null，不猜测 namespace。status、last_active_at、next_action 是无 H 数据时的配置基线；有 H 数据时使用 H 运行时状态。IDLE 映射 UNKNOWN，不假装任务正在执行。
@@ -11,7 +13,7 @@ Source of Truth：Registry 管项目身份、别名、机器和外部引用；H 
 默认 Continue CLI 读取 canonical Registry；支持精确 ID、名称、别名、workspace、H ID 和 GitHub remote；自然语言名称沿用现有匹配。未知引用 NOT_FOUND，歧义 BLOCKED，损坏配置或重复身份 fail closed。既有 `--registry` 是只读多源发现视图，不会自动写入 canonical 配置。
 
 ```powershell
-Set-Location <PROJECT_ROOT>
+Set-Location '<PROJECT_ROOT>'
 & '<HERMES_PYTHON>' -X utf8 -B -m hpa.continuation p_example --hermes-home '<HERMES_HOME>' --trusted-root '<PROJECT_ROOT>'
 & '<HERMES_PYTHON>' -X utf8 -B -m unittest discover -s tests -p 'test_*.py' -v
 ```

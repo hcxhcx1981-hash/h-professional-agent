@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from hpa.capability import TaskProfile,build_task_profile,route_task
 from hpa.continuation import DeviceContext,NormalizedProjectState
-from hpa.registry import DEFAULT_REGISTRY,ProjectRegistry
+from hpa.registry import EXAMPLE_REGISTRY,ProjectRegistry
 from tests.test_capability import _make_capsule
 from hpa.core import Project
 
@@ -19,7 +19,7 @@ class TaskRoutingTests(unittest.TestCase):
         self.root=Path(temp.name)
         self.device=DeviceContext('win10','test','Windows-10','Admin',(str(self.root),),(),
             datetime.now(timezone.utc).isoformat(),'fixture',1.0)
-        self.row=json.loads(DEFAULT_REGISTRY.read_text(encoding='utf-8'))['projects'][0]
+        self.row=json.loads(EXAMPLE_REGISTRY.read_text(encoding='utf-8'))['projects'][0]
         self.row.update(machine_id='win10',workspace=str(self.root))
         self.state=NormalizedProjectState(self.row['project_id'],self.row['display_name'],str(self.root),None,
             'IDLE',None,None,None,'检查当前项目状态',None,('H/projects/'+self.row['project_id'],))

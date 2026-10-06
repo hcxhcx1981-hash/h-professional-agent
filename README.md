@@ -1,17 +1,42 @@
-# H Professional Agent Architecture V0.1
+# H Professional Agent
 
 独立的薄适配仓库，不修改 Hermes、Memory OS 或 DHAF Core。
 
-流程：明确选择 Project Capsule → conversation/project 绑定 → 固定版本 Capsule route → 精确 Memory namespace → 正常 Hermes chat CLI / 原生工具 → 项目产物目录 → DHAF shadow 记录。
+当前包括 Phase 2A Canonical Project Registry 和 Phase 2B Task Router / Handoff Contract。项目身份解析与任务路由只做判断和推荐，`AUTO_DELEGATION=NO`。
+
+## 当前能力
+
+- **Project Registry / Machine Isolation**：一个 canonical 项目身份关联 H 项目、Git remote、别名、workspace 和 machine_id；跨机器、冲突、失效路径或损坏配置阻断。
+- **Continue / Project Resolution**：复用真实 H 的只读 Project State，按项目 ID、名称、别名、workspace、H ID 解析；不猜项目，也不写 H 数据库。
+- **Capability Router**：按任务、绑定 Capsule、工具声明和限制判断 H 内部能力；工具已登记不等于执行健康已确认。
+- **SELF / CX / WB / AC Task Router**：结构化 Task Profile 产生确定性推荐；H 低风险能力优先，常规研究交 WB，正式工程/Git 交 CX，AC 需要明确适用证据。混合研究与开发要求分阶段。
+- **Handoff Contract / Human Approval Gate**：外部交接携带项目、机器、范围、边界和验收；必须人工批准，不自动启动或发送任务给外部 Agent。
+- **Specialist / Evidence Verification**：已有单一注册 Specialist 的受控纯执行契约和证据判断，不是通用多 Agent 执行平台。
+
+这不是全自动多 Agent orchestration。外部 Agent delegation 当前仍需人工批准。项目尚未指定许可证，仓库公开不代表授予开源许可；上游依赖的许可见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+
+## 本机 Registry
+
+公开仓库只跟踪 `hpa/project-registry.example.json`。真实配置使用忽略的 `hpa/project-registry.local.json`，wheel 只包含示例，不包含本机 Registry。
+
+```powershell
+Set-Location '<PROJECT_ROOT>'
+Copy-Item hpa/project-registry.example.json hpa/project-registry.local.json
+python -B -m hpa.registry --hermes-home '<HERMES_HOME>' --root '<WORKSPACE>'
+```
+
+首次配置时编辑 local 文件：通过已有 H 登记接口核验 project_id / h_project_id、真实 Git remote 和 workspace；`machine_id` 必须与 `hpa.continuation.local_device` 生成的 Device Context 一致，不能照抄示例。Registry 不创建 H 项目，不读取或保存凭据。缺少 local 文件时 fail closed，不回退到示例；也可用 `--registry-file` 指定本机文件。安装 wheel 后请通过该参数指定自己的配置位置。
+
+使用说明：[Project Registry](docs/PHASE_2A_PROJECT_REGISTRY.md)、[Task Routing](docs/TASK_ROUTING.md)。下面是早期 synthetic Capsule/chat 适配层的独立运行流程。
 
 ## 边界
 
 - allowed_skills / allowed_tools 是 **Host selection**，不是 Runtime security。每进程注册一个明确的原生工具集合，不修改全局设置。
 - Skill 正文和任务说明是提示词。H 的原生 read_file/terminal 等通用工具不是项目文件沙箱；本项目只检查自己读写的路径。本次 fixture 验收不证明任意恶意模型无法访问其他文件。
 - DHAF 始终 SHADOW_ONLY / NOT_LIVE_READY，建议不会执行；没有强制 live gate。
-- V0.1 只接显式 synthetic JSON fixture，不读取私人 Memory、原生 DB、.env 或凭据。真实数据接入不在本轮范围内。
-- 必须显式指定 capsule；不会从任务、CWD 或历史猜项目。每次调用新建 H 会话，切换项目不复用旧历史。失效 binding 和 Capsule 漂移立即阻断。
-- 路由只给 Capsule 允许候选，最多 1 个 Skill 和该 Skill 所需的 Tools。低分/无结果/分差不足要求澄清。没有 LLM Router，也没有新服务或编排器。
+- 早期 chat/Memory 适配层只接显式 synthetic JSON fixture，不读取私人 Memory 或凭据；Phase 2A/2B 可只读核验真实 H 项目元数据，不读取原始任务内容。
+- 正常 chat 入口必须显式指定 capsule；Registry/Continue 可解析已登记项目，缺失 Capsule 不构成执行许可。每次 chat 新建 H 会话，切换项目不复用旧历史。失效 binding 和 Capsule 漂移阻断。
+- Capsule Skill 路由最多选择 1 个 Skill 和所需 Tools；低分/无结果/分差不足阻断。Task Router 另按结构化任务特征给 Agent 推荐，不执行交接。没有 LLM Router、新服务或编排器。
 - Capsule 路由输入以英文词汇/显式触发短语为主，中文任务可能低置信；此时阻断，不加 LLM 翻译兜底。
 - 这连接正常 **CLI 聊天入口**，不是 Electron Desktop 全局安装。模型和 Provider 使用 H 已有默认值。
 
