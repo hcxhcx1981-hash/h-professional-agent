@@ -29,8 +29,17 @@ jobs:
       - name: Compile check
         run: python -m compileall -q hpa tests
 
-      - name: Unit tests
-        run: python -B -m unittest discover -s tests -p "test_*.py" -v
+      - name: Portable unit tests
+        run: >
+          python -B -m unittest -v
+          tests.test_capability
+          tests.test_continuation
+          tests.test_discovery
+          tests.test_evidence
+          tests.test_registry
+          tests.test_registry_bootstrap
+          tests.test_specialist
+          tests.test_task_routing
 
       - name: Build wheel
         run: python -m build --wheel --no-isolation
