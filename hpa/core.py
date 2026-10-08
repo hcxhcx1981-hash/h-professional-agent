@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 
 PIN = "6492d704f9d389233038ee35630940acba7c2f2f"
-MEMORY_PIN = "e53d43089f288146a089281cfce47403544d6004"
+MEMORY_PIN = "2a75f1dc56053e07516318aea69716f0333810f5"
 # V0.1 required capsule fields. `FIELDS` is kept as an alias so existing imports/
 # references keep working.
 REQUIRED_FIELDS = {"version", "project_id", "project_name", "project_root", "allowed_skills", "allowed_tools", "memory_namespace", "artifact_workspace", "created_at"}

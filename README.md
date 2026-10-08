@@ -44,7 +44,7 @@ python -B -m hpa.registry --hermes-home '<HERMES_HOME>' --root '<WORKSPACE>'
 
 ## 固定依赖
 
-Capsule commit `6492d704f9d389233038ee35630940acba7c2f2f`，Apache-2.0；调用上游 route，不复制源代码到本仓库。包内 Python 文件完整性在选择前校验，拒绝版本漂移。Memory OS 固定 `e53d43089f288146a089281cfce47403544d6004`，执行前验证 HEAD 和 tracked files。DHAF 使用你已配置的 checkout，Core 不变。
+Capsule commit `6492d704f9d389233038ee35630940acba7c2f2f`，Apache-2.0；调用上游 route，不复制源代码到本仓库。包内 Python 文件完整性在选择前校验，拒绝版本漂移。Memory OS 固定 `2a75f1dc56053e07516318aea69716f0333810f5`，执行前验证 HEAD 和 tracked files。DHAF 使用你已配置的 checkout，Core 不变。
 
 ## 另一台 Win10 / Mac-Win10 Boot Camp
 
