@@ -91,8 +91,8 @@ class TestEvidence(unittest.TestCase):
     # REGRESSION (V0.1 evidence-expiry fix): a STALE primary (2020 WEB_PAGE)
     # must NOT satisfy the "at least one valid primary evidence" requirement.
     # The only fresh evidence here is snippets, so the claim must stay
-    # INSUFFICIENT.  The old code incorrectly returned VERIFIED because the
-    # stale primary still counted toward has_primary_support.
+    # INSUFFICIENT with an explicit STALE_PRIMARY reason (never VERIFIED, and
+    # never reclassified as an ordinary SNIPPET_ONLY / SINGLE_SOURCE).
     def test_stale_primary_plus_fresh_snippets_insufficient(self):
         b = verify_claim(
             claim_id="c", statement="x",
@@ -107,6 +107,51 @@ class TestEvidence(unittest.TestCase):
             current_date="2026-10-13")
         self.assertEqual(b.status, INSUFFICIENT)
         self.assertFalse(b.counts["has_primary_support"])
+        self.assertIn("STALE_PRIMARY", b.rationale)
+
+    # A: a single SEARCH_RESULT (no primary at all) stays an ordinary
+    # snippet-only case -> SNIPPET_ONLY, NOT SINGLE_SOURCE / STALE.
+    def test_single_search_result_snippet_only(self):
+        b = verify_claim(
+            claim_id="c", statement="x",
+            records=[
+                S("a.com", "s1", "one snippet", "PARTIAL",
+                  typ="SEARCH_RESULT", pub="2026-09-01"),
+            ],
+            current_date="2026-10-13")
+        self.assertEqual(b.status, INSUFFICIENT)
+        self.assertIn("SNIPPET_ONLY", b.rationale)
+
+    # B: two independent SEARCH_RESULTS (one stale, one fresh), no primary ->
+    # still an ordinary snippet-only case -> SNIPPET_ONLY (the stale snippet
+    # must not flip the reason to STALE).
+    def test_mixed_fresh_stale_snippets_no_primary_snippet_only(self):
+        b = verify_claim(
+            claim_id="c", statement="x",
+            records=[
+                S("a.com", "sA", "stale snippet", "PARTIAL",
+                  typ="SEARCH_RESULT", pub="2020-01-01"),
+                S("b.com", "sB", "fresh snippet", "PARTIAL",
+                  typ="SEARCH_RESULT", pub="2026-09-01"),
+            ],
+            current_date="2026-10-13")
+        self.assertEqual(b.status, INSUFFICIENT)
+        self.assertIn("SNIPPET_ONLY", b.rationale)
+
+    # D: ALL primary records expired -> INSUFFICIENT, keeping the STALE reason.
+    def test_all_primary_stale_reports_stale(self):
+        b = verify_claim(
+            claim_id="c", statement="x",
+            records=[
+                S("a.com", "sA", "expired page", "YES",
+                  typ="WEB_PAGE", pub="2020-01-01"),
+                S("b.com", "sB", "expired page", "YES",
+                  typ="WEB_PAGE", pub="2021-01-01"),
+            ],
+            current_date="2026-10-13")
+        self.assertEqual(b.status, INSUFFICIENT)
+        self.assertIn("STALE", b.rationale)
+        self.assertNotIn("SNIPPET_ONLY", b.rationale)
 
     # 4B: a FRESH primary + an independent fresh supporting snippet still backs
     # VERIFIED (freshness-aware primary support works in the positive direction).
