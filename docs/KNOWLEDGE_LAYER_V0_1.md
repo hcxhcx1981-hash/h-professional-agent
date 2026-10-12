@@ -130,14 +130,14 @@ supersedes: <旧条目引用> | null
 - 查询结果必须展示完整 `source_refs`（含原文定位、来源身份、时间效力、引用有效性），不允许仅返回 LLM 生成的汇总文本。
 - `confidence` 数值是检索加权参考，**不作为事实可信证明**；事实判断须以原始来源为准。
 - `reference_validity=BROKEN` 的条目在查询时明确标记，调用方须自行判断是否可信，不得默认视为有效引用。
-- 与 HPA 现有 `source_refs` 字段语义保持一致（见 Control Plane V0.1 §4 身份与引用）。
+- 本字段设计目标是与现有 Control Plane 来源引用机制兼容；具体 schema、字段映射及兼容性尚待实现前核准。
 
 ## 5. 知识冲突与过期检测
 
 ### 5.1 冲突检测
 
 - 同一实体或概念在不同页面出现矛盾描述时，标记 **KNOWLEDGE_CONFLICT**（Lint 能力，FUTURE_OPTIONAL）。
-- **KNOWLEDGE_CONFLICT ≠ EVIDENCE_CONFLICT**：知识层冲突是参考性标记，**不得**直接成为 HPA Evidence 模块的正式裁决。EVIDENCE_CONFLICT 由 HPA Specialist 接口产生，是正式证据判断。
+- **KNOWLEDGE_CONFLICT 与正式证据判定分离**：KNOWLEDGE_CONFLICT 是未来知识层的参考性标记，**不得**直接替代 HPA Evidence Specialist 的正式裁决。正式 Evidence 状态沿用现有枚举：VERIFIED / CONFLICT / INSUFFICIENT。
 - 冲突页面在 `index.md` 中标记，查询时同时呈现冲突双方的 `source_refs`，由调用方裁定。
 
 ### 5.2 过期检测
