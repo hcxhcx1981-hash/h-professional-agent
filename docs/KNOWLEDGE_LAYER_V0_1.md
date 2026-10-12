@@ -55,46 +55,52 @@ schema/
   schema.md      # 页面类型规则、结构规范、生命周期
 ```
 
+> 上述目录结构是逻辑分层的示意，不强制未来实现采用此完整物理结构。未来实现可采用部分子目录、扁平结构或其他组织形式，以 `raw/`、`wiki/`、`schema/` 三层职责划分为准。
+
 **与 HPA 现有架构的映射：**
 
 - `raw/sources/` 等价于 HPA 项目内受控文件与外部研究材料。HPA 的 Evidence Verification 模块继续作为"原始证据判断"的唯一入口。
 - `wiki/` 是 LLM 维护的专业知识层。每条内容必须携带 YAML frontmatter（`project_id`、`source_refs`、`confidence`、`version`、`created_at`、`expires_at`）。
 - `schema/` 是 HPA 项目专属规则：页面类型定义、冲突解决策略、过期检测规则、MCP Adapter 配置。
-- **与 Memory OS 隔离**：`wiki/` 存储专业领域知识，Memory OS 存储 Agent 自身长期记忆。两者通过 Capsule `memory_namespace` 隔离，不双写、不自动同步。
+- **与 Memory OS 隔离**：`wiki/` 存储专业领域知识，Memory OS 存储 Agent 自身长期记忆。两者按职责分离，不双写、不自动同步。Capsule `memory_namespace` 是 Memory OS 检索作用域字段（`hpa/core.py` 传 `--project` 参数给 Memory OS CLI），不是知识层与 Memory OS 的隔离机制；知识层存储与 Memory OS 之间的具体隔离方案**设计待定**。
 
 ## 3. Ingest → Query → Lint 维护流程
 
 ### 3.1 Ingest
 
-1. 将新来源放入 `raw/sources/` 或通过可信写入者注入。
-2. LLM 执行两步 Chain-of-Thought：(a) 分析来源结构与关键事实；(b) 生成或更新 wiki 页面，附带 `source_refs`。
-3. 增量缓存：同一来源内容摘要不变时跳过重复处理。
-4. 来源变更检测：自动发现 `raw/sources/` 外部修改，触发增量 ingest 或清理。
+1. 变更检测：新来源注入 `raw/sources/`；可选监听器（FUTURE_OPTIONAL）发现外部变更。
+2. 候选更新：可选结构化分析（分析步数由模型自决，不固定调用次数，不要求输出内部推理链）生成候选 wiki 页面内容并附 `source_refs`；候选不直接写入。
+3. 授权：候选须通过 HPA 写入权限链路（Action Policy）后方可执行；Agent 本身不因知识维护需要而获得写权限。
+4. 写入：仅授权通过的候选可写入；**禁止默认自动删除、覆盖或清理**既有内容。
+5. 回读验证：写入后回读比对内容一致性；验证失败标记 WRITE_VERIFY_FAILED，不视为成功。
 
 ### 3.2 Query
 
 1. 任务上下文触发知识检索，优先从 `wiki/index.md` 导航。
 2. 支持 **Read Sources Only** 模式：仅从 `raw/sources/` 原文回答，不引用 LLM 生成内容。
 3. 检索结果同时呈现知识摘要与 `source_refs`，调用方可核验。
-4. 向量语义搜索为可选扩展，不作为默认路径。
+4. 向量语义搜索为 FUTURE_OPTIONAL 扩展（不新增强制依赖），不作为默认路径。
 
-### 3.3 Lint
+### 3.3 Lint（FUTURE_OPTIONAL）
 
-1. 按策略触发，扫描 wiki/ 页面：
+> 本节描述的 Lint 能力为 FUTURE_OPTIONAL，不是 HPA 当前或未来强制组件。不新增强制依赖。
+
+1. 按策略触发（可选），扫描 wiki/ 页面：
    - 来源缺失或 `source_refs` 不可解析
    - 知识冲突（同一实体在不同页面矛盾描述）
    - 过期标记（`expires_at` 已过期或 TTL 超期）
    - 孤立页面（无入站链接）
    - 与 `schema/schema.md` 规则不一致
-2. Lint 结果生成为 Review 条目，由人工裁定后修复，不自动修改内容。
+2. Lint 结果生成为 Review 条目（FUTURE_OPTIONAL），由人工裁定后修复，不自动修改内容。
 3. Lint 操作记录写入 `wiki/log.md`。
 
 ## 4. 增量更新与来源追溯
 
 ### 4.1 增量更新
 
-- 知识条目按 `source_hash` 追踪：来源不变时不重复 ingest。
-- 来源更新后仅重新处理受影响页面。
+- 知识条目按 `source_hash` 追踪：来源不变时不重复处理。
+- 来源更新后仅生成受影响页面的候选更新（见 §3.1 授权流程）；**不默认覆盖或删除**既有内容。
+- 任何覆盖或删除操作须单独授权并记录审计。
 - `wiki/log.md` 是 append-only 操作记录，格式可解析（时间戳 + 操作类型 + 页面 + 摘要）。
 
 ### 4.2 来源追溯
@@ -107,8 +113,13 @@ project_id: <HPA project_id>
 source_refs:
   - type: file | url | session
     ref: <路径或 URL>
+    original_location: <原文定位：章节/段落/页码或 offset>
+    source_identity: <来源身份：author / org / publisher>
+    valid_from: ISO-8601          # 时间效力：生效起始
+    valid_until: ISO-8601 | null  # 时间效力：失效时间（null = 未失效）
     version: <commit 或 content hash>
-confidence: 0..1
+    reference_validity: RESOLVED | PENDING | BROKEN
+confidence: 0..1   # 检索排序参考，不代表事实可信证明
 created_at: ISO-8601
 updated_at: ISO-8601
 expires_at: ISO-8601 | null
@@ -116,22 +127,24 @@ supersedes: <旧条目引用> | null
 ---
 ```
 
-- 查询结果必须展示 `source_refs`，不允许仅返回 LLM 生成的汇总文本。
+- 查询结果必须展示完整 `source_refs`（含原文定位、来源身份、时间效力、引用有效性），不允许仅返回 LLM 生成的汇总文本。
+- `confidence` 数值是检索加权参考，**不作为事实可信证明**；事实判断须以原始来源为准。
+- `reference_validity=BROKEN` 的条目在查询时明确标记，调用方须自行判断是否可信，不得默认视为有效引用。
 - 与 HPA 现有 `source_refs` 字段语义保持一致（见 Control Plane V0.1 §4 身份与引用）。
 
 ## 5. 知识冲突与过期检测
 
 ### 5.1 冲突检测
 
-- 同一实体或概念在不同页面出现矛盾描述时，Lint 标记 CONFLICT。
+- 同一实体或概念在不同页面出现矛盾描述时，标记 **KNOWLEDGE_CONFLICT**（Lint 能力，FUTURE_OPTIONAL）。
+- **KNOWLEDGE_CONFLICT ≠ EVIDENCE_CONFLICT**：知识层冲突是参考性标记，**不得**直接成为 HPA Evidence 模块的正式裁决。EVIDENCE_CONFLICT 由 HPA Specialist 接口产生，是正式证据判断。
 - 冲突页面在 `index.md` 中标记，查询时同时呈现冲突双方的 `source_refs`，由调用方裁定。
-- 与 HPA Evidence 模块的 CONFLICT 判定保持一致语义。
 
 ### 5.2 过期检测
 
 - `expires_at` 字段驱动：过期条目自动标记 STALE。
 - TTL 由 `schema/schema.md` 定义（按项目类型配置）。
-- 过期条目不删除，标记后进入 Review 队列。
+- 过期条目**不删除**；可选进入 Review 队列（FUTURE_OPTIONAL）由人工裁定，不自动清理。
 - 与 Memory OS 的 supersedes/retire 机制独立运行，不互相触发。
 
 ## 6. 可选 MCP Knowledge Adapter
@@ -156,10 +169,16 @@ supersedes: <旧条目引用> | null
 
 | 项 | 状态 | 说明 |
 | --- | --- | --- |
-| 三层架构定义 | DESIGN_ONLY | 本文档定义，无实现 |
-| Ingest / Query / Lint 流程 | DESIGN_ONLY | 本文档定义，无实现 |
+| 三层架构定义（逻辑分层） | DESIGN_ONLY | 本文档定义，无实现；不强制物理目录结构 |
+| Ingest 候选更新流程（变更检测→候选→授权→写入→回读验证） | DESIGN_ONLY | 本文档定义，无实现 |
+| Query 基础检索 | DESIGN_ONLY | 本文档定义，无实现 |
+| Lint | FUTURE_OPTIONAL | 可选能力，非强制组件，不新增强制依赖 |
+| Review 队列 | FUTURE_OPTIONAL | 可选能力，非强制组件 |
+| 向量语义搜索 | FUTURE_OPTIONAL | 可选扩展，不新增强制依赖 |
+| 来源监听器 | FUTURE_OPTIONAL | 可选能力，非强制组件 |
 | 增量更新与来源追溯字段契约 | DESIGN_ONLY | 字段定义，无实现 |
-| 冲突 / 过期检测策略 | DESIGN_ONLY | 策略定义，无实现 |
+| KNOWLEDGE_CONFLICT 检测策略 | FUTURE_OPTIONAL | 参考性标记，不等于 EVIDENCE_CONFLICT 正式裁决 |
+| 过期检测策略 | DESIGN_ONLY | 策略定义，无实现 |
 | MCP Knowledge Adapter | FUTURE_OPTIONAL | 可选未来能力，未设计具体接口 |
 | 代码实现 | NOT_STARTED | 不在本任务范围 |
 | 测试 | NOT_STARTED | 不在本任务范围 |
