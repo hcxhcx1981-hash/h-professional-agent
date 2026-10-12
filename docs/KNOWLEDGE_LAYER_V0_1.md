@@ -177,7 +177,7 @@ supersedes: <旧条目引用> | null
 | 向量语义搜索 | FUTURE_OPTIONAL | 可选扩展，不新增强制依赖 |
 | 来源监听器 | FUTURE_OPTIONAL | 可选能力，非强制组件 |
 | 增量更新与来源追溯字段契约 | DESIGN_ONLY | 字段定义，无实现 |
-| KNOWLEDGE_CONFLICT 检测策略 | FUTURE_OPTIONAL | 参考性标记，不等于 EVIDENCE_CONFLICT 正式裁决 |
+| KNOWLEDGE_CONFLICT 检测策略 | FUTURE_OPTIONAL | 参考性标记，不替代 Evidence Specialist 的正式 CONFLICT 判定 |
 | 过期检测策略 | DESIGN_ONLY | 策略定义，无实现 |
 | MCP Knowledge Adapter | FUTURE_OPTIONAL | 可选未来能力，未设计具体接口 |
 | 代码实现 | NOT_STARTED | 不在本任务范围 |
