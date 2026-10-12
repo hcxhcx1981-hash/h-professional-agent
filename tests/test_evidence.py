@@ -88,6 +88,56 @@ class TestEvidence(unittest.TestCase):
         self.assertEqual(b.status, INSUFFICIENT)
         self.assertIn("STALE", b.rationale)
 
+    # REGRESSION (V0.1 evidence-expiry fix): a STALE primary (2020 WEB_PAGE)
+    # must NOT satisfy the "at least one valid primary evidence" requirement.
+    # The only fresh evidence here is snippets, so the claim must stay
+    # INSUFFICIENT.  The old code incorrectly returned VERIFIED because the
+    # stale primary still counted toward has_primary_support.
+    def test_stale_primary_plus_fresh_snippets_insufficient(self):
+        b = verify_claim(
+            claim_id="c", statement="x",
+            records=[
+                S("a.com", "sA", "old 2020 page", "YES",
+                  typ="WEB_PAGE", pub="2020-01-01"),
+                S("b.com", "sB", "fresh snippet", "PARTIAL",
+                  typ="SEARCH_RESULT", pub="2026-05-01"),
+                S("c.com", "sC", "fresh snippet", "PARTIAL",
+                  typ="SEARCH_RESULT", pub="2026-06-01"),
+            ],
+            current_date="2026-10-13")
+        self.assertEqual(b.status, INSUFFICIENT)
+        self.assertFalse(b.counts["has_primary_support"])
+
+    # 4B: a FRESH primary + an independent fresh supporting snippet still backs
+    # VERIFIED (freshness-aware primary support works in the positive direction).
+    def test_fresh_primary_plus_independent_snippet_verified(self):
+        b = verify_claim(
+            claim_id="c", statement="x",
+            records=[
+                S("a.com", "sA", "fresh page", "YES",
+                  typ="WEB_PAGE", pub="2026-09-01"),
+                S("b.com", "sB", "fresh snippet", "PARTIAL",
+                  typ="SEARCH_RESULT", pub="2026-09-02"),
+            ],
+            current_date="2026-10-13")
+        self.assertEqual(b.status, VERIFIED)
+        self.assertTrue(b.counts["has_primary_support"])
+
+    # 4C: an explicit conflict still wins (CONFLICT precedence is untouched by
+    # the freshness fix), even when a stale primary is also present.
+    def test_conflict_wins_over_stale_primary(self):
+        b = verify_claim(
+            claim_id="c", statement="x",
+            records=[
+                S("a.com", "sA", "old 2020 page", "YES",
+                  typ="WEB_PAGE", pub="2020-01-01"),
+                S("b.com", "sB", "fresh contradiction", "NO",
+                  typ="SEARCH_RESULT", pub="2026-09-01"),
+            ],
+            current_date="2026-10-13")
+        self.assertEqual(b.status, CONFLICT)
+        self.assertGreaterEqual(len(b.conflicts), 1)
+
     # Nothing at all -> INSUFFICIENT.
     def test_no_evidence(self):
         b = verify_claim(claim_id="c", statement="x", records=[],

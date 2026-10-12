@@ -178,20 +178,25 @@ def verify_claim(*, claim_id, statement, records, min_independent=2,
     supporting = [r for r in recs if r.supports in _SUPPORTING]
     # Freshness: a PUBLISHED_AT older than max_age_days cannot back VERIFIED.
     ref = _parse_date(current_date) or date.today()
-    fresh_support = []
-    stale = []
-    for r in supporting:
+
+    def _fresh(r) -> bool:
         p = _parse_date(r.published_at)
-        if p and (ref - p).days > max_age_days:
-            stale.append(r)
-        else:
-            fresh_support.append(r)
+        return not (p and (ref - p).days > max_age_days)
+
+    fresh_support = [r for r in supporting if _fresh(r)]
+    stale = [r for r in supporting if not _fresh(r)]
 
     # Independent sources = distinct hosts among *fresh supporting* records.
     fresh_indep = len({_host(r.source_url) for r in fresh_support if r.source_url})
     all_indep = len({_host(r.source_url) for r in supporting if r.source_url})
 
-    has_primary_support = any(r.supports in _SUPPORTING for r in primary)
+    # A primary (original / 原始) record satisfies the "at least one valid
+    # raw-evidence" requirement only while it is still within the validity
+    # window.  A stale primary source no longer backs a VERIFIED verdict,
+    # even though it remains recorded in the evidence set.
+    has_primary_support = any(
+        r.supports in _SUPPORTING and _fresh(r) for r in primary
+    )
     snippet_only = (len(primary) == 0) and (len(search) > 0)
 
     counts = _counts(recs) | {
@@ -208,15 +213,10 @@ def verify_claim(*, claim_id, statement, records, min_independent=2,
             "NO_SUPPORTING_EVIDENCE: no record actively supports the claim.",
             recs, counts, conflicts, provenance, router_decision)
 
-    if require_extracted_for_verified and not has_primary_support:
-        return ClaimBundle(
-            claim_id, statement, INSUFFICIENT,
-            "SNIPPET_ONLY: support exists but only as discovery-grade snippets "
-            "(SEARCH_RESULT/NEWS); a VERIFIED verdict requires at least one "
-            "primary extract (WEB_PAGE/LOCAL_FILE). Not treating snippets as "
-            "final evidence.",
-            recs, counts, conflicts, provenance, router_decision)
-
+    # Freshness / independence first: whether there are enough *fresh*
+    # independent supporting sources (STALE / SINGLE_SOURCE).  This takes
+    # precedence over "snippet only" because it is the more specific reason
+    # whenever source count or freshness is the binding constraint.
     if fresh_indep < min_independent:
         if all_indep >= min_independent:
             return ClaimBundle(
@@ -231,10 +231,22 @@ def verify_claim(*, claim_id, statement, records, min_independent=2,
             f"(need >= {min_independent}); not enough to verify.",
             recs, counts, conflicts, provenance, router_decision)
 
+    # Enough fresh independent support exists: confirm at least one *valid*
+    # (fresh) primary record actually backs it before calling VERIFIED.
+    if require_extracted_for_verified and not has_primary_support:
+        return ClaimBundle(
+            claim_id, statement, INSUFFICIENT,
+            "SNIPPET_ONLY: support exists but only as discovery-grade snippets "
+            "(SEARCH_RESULT/NEWS); a VERIFIED verdict requires at least one "
+            "valid primary extract (WEB_PAGE/LOCAL_FILE) within the validity "
+            "window. Not treating snippets or stale primary sources as final "
+            "evidence.",
+            recs, counts, conflicts, provenance, router_decision)
+
     return ClaimBundle(
         claim_id, statement, VERIFIED,
         f"VERIFIED: {fresh_indep} independent supporting sources incl. a "
-        f"primary extract; no contradiction.",
+        f"valid primary extract; no contradiction.",
         recs, counts, conflicts, provenance, router_decision)
 
 
