@@ -42,8 +42,12 @@ def local_device(hermes_home: Path, roots: list[Path]) -> DeviceContext:
     host, user = socket.gethostname(), getpass.getuser()
     identity = (hermes_home / 'install_id').read_text(encoding='utf-8').strip()
     valid = bool(re.fullmatch(r'[0-9a-f]{32}', identity)) and platform.system() == 'Windows'
-    build = platform.version().split('.')
-    valid = valid and len(build) == 3 and build[-1].isdigit() and int(build[-1]) < 22000
+    # Windows 10 and Windows 11 both report NT version 10.0.<build> (Win10
+    # 1507+ = build >= 10240, Win11 22H2+ = build >= 22000). Accept every
+    # valid 10.0 build in that range; malformed or out-of-range versions stay blocked.
+    version = platform.version().split('.')
+    valid = valid and len(version) == 3 and all(p.isdigit() for p in version) \
+        and version[0] == '10' and version[1] == '0' and int(version[2]) >= 10240
     resolved = tuple(str(p.resolve(strict=True)) for p in roots if p.is_dir())
     # File existence establishes a recommendation candidate, NOT execution health/grant.
     adapters = []
